@@ -2,6 +2,8 @@ This is a fork of StephanDollberg/go-json-rest-middleware-jwt with the intent to
 
 Work in progress, please dont use it currently.
 
+The following text is from the original: [StephanDollberg/go-json-rest-middleware-jwt](https://github.com/StephanDollberg/go-json-rest-middleware-jwt)
+
 JWT Middleware for Go-Json-Rest
 ==================================
 
