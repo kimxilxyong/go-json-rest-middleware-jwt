@@ -1,3 +1,7 @@
+This is a fork of StephanDollberg/go-json-rest-middleware-jwt with the intent to return more detailed auth errors in the JSON return data, including errors from dgrijalva/jwt-go.
+
+Work in progress, please dont use it currently.
+
 JWT Middleware for Go-Json-Rest
 ==================================
 
