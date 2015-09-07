@@ -1,6 +1,26 @@
 This is a fork of StephanDollberg/go-json-rest-middleware-jwt with the intent to return more detailed auth errors in the JSON return data, including errors from dgrijalva/jwt-go.
 
-Work in progress, please dont use it currently.
+Example return from curl:
+
+```
+>curl -i -H "Authorization:Bearer eyJhbGci ...... wMzM"  http://localhost:8080/somejwt/login
+
+HTTP/1.1 401 Unauthorized
+Content-Type: application/json
+Www-Authenticate: JWT realm=HolyRealm
+X-Powered-By: go-json-rest
+Date: Mon, 07 Sep 2015 02:35:41 GMT
+Content-Length: 103
+
+{
+  "Error": "Not Authorized",
+  "JwtValidationCode": 8,
+  "JwtValidationMessage": "token is expired"
+}
+```
+
+Its considered alpha, the functionality is implemented but no testcases yet.
+Debug Printf's need to be removed - but if you try it, it should not burn down your house.
 
 The following text is from the original: [StephanDollberg/go-json-rest-middleware-jwt](https://github.com/StephanDollberg/go-json-rest-middleware-jwt)
 
