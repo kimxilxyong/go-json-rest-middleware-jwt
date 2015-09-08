@@ -59,12 +59,23 @@ type JWTMiddleware struct {
 	PayloadFunc func(userId string) map[string]interface{}
 }
 
+// The errors that might occur inside auth_jwt and not inside dgrijalva/jwt-go
+const (
+	AuthJwtErrorNotValidYet uint32 = jwt.ValidationErrorNotValidYet << iota // error const start after jwt errors
+	AuthJwtErrorLoginFailed
+	AuthJwtErrorAuthorizationFailed // Login failed
+	AuthJwtErrorInternalError
+)
+
 // MiddlewareFunc makes JWTMiddleware implement the Middleware interface.
 func (mw *JWTMiddleware) MiddlewareFunc(handler rest.HandlerFunc) rest.HandlerFunc {
 
 	// DEBUG
-	fmt.Printf("*************************** MiddlewareFunc")
-
+	fmt.Printf("*************************** MiddlewareFunc\n")
+	fmt.Printf("*************************** test error code jwt.ValidationErrorNotValidYet %s\n", jwt.ValidationErrorNotValidYet)
+	fmt.Printf("*************************** test error code AuthJwtErrorNotValidYet %s\n", AuthJwtErrorNotValidYet)
+	fmt.Printf("*************************** test error code AuthJwtErrorLoginFailed %s\n", AuthJwtErrorLoginFailed)
+	fmt.Printf("*************************** test error code AuthJwtErrorInternalError %s\n", AuthJwtErrorInternalError)
 	if mw.Realm == "" {
 		log.Fatal("Realm is required")
 	}
@@ -116,7 +127,7 @@ func (mw *JWTMiddleware) middlewareImpl(writer rest.ResponseWriter, request *res
 	}
 
 	if !mw.Authorizator(id, request) {
-		mw.unauthorized(writer, err)
+		mw.unauthorized(writer, &AuthJwtError{err: "user " + id + " not authorized for request " + request.URL.String(), ErrorCode: AuthJwtErrorAuthorizationFailed})
 		return
 	}
 
@@ -176,7 +187,7 @@ func (mw *JWTMiddleware) LoginHandler(writer rest.ResponseWriter, request *rest.
 	}
 
 	if !mw.Authenticator(login_vals.Username, login_vals.Password) {
-		mw.unauthorized(writer, err)
+		mw.unauthorized(writer, &AuthJwtError{err: "login failed", ErrorCode: AuthJwtErrorLoginFailed})
 		return
 	}
 	// DEBUG
@@ -195,8 +206,8 @@ func (mw *JWTMiddleware) LoginHandler(writer rest.ResponseWriter, request *rest.
 	if mw.MaxRefresh != 0 {
 		token.Claims["orig_iat"] = time.Now().Unix()
 	}
-	tokenString, err := token.SignedString(mw.Key)
 
+	tokenString, err := token.SignedString(mw.Key)
 	if err != nil {
 		mw.unauthorized(writer, err)
 		return
@@ -293,7 +304,7 @@ func (mw *JWTMiddleware) unauthorized(writer rest.ResponseWriter, err error) {
 	fmt.Printf("* unauthorized\n")
 
 	writer.Header().Set("WWW-Authenticate", "JWT realm="+mw.Realm)
-	errorMsg := "Not Authorized"
+	errorMsg := "not authorized"
 
 	var JwtValidationMessage string
 	var JwtValidationCode uint32
@@ -313,6 +324,9 @@ func (mw *JWTMiddleware) unauthorized(writer rest.ResponseWriter, err error) {
 				JwtValidationMessage = ae.Error()
 				JwtValidationCode = ae.ErrorCode
 			}
+		default:
+			JwtValidationMessage = err.Error()
+			JwtValidationCode = AuthJwtErrorInternalError
 		}
 	}
 	writer.WriteHeader(http.StatusUnauthorized)
