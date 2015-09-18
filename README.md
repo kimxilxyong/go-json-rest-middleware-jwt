@@ -22,6 +22,38 @@ Content-Length: 103
 Its considered alpha, the functionality is implemented but no testcases yet.
 Debug Printf's need to be removed - but if you try it, it should not burn down your house.
 
+Update 18.9.2015
+
+Its considered beta now - debug printfs have been removed, error messages have been moved into
+
+    if debug ..
+
+statements.
+
+Example jwt middleware init:
+
+  	jwt_middleware = &jwt.JWTMiddleware{
+		Key:        []byte("THIS SECRET STRING"),
+		Realm:      "THISREALM",
+		DebugLevel: 3,
+		Timeout:    time.Hour,
+		MaxRefresh: time.Hour * 24,
+		Authenticator: func(username string, password string) bool {
+			if username == "admin" && password == "admin" {
+				return true
+			}
+		},
+		Authorizator: func(username string, request *rest.Request) bool {
+			return true
+		},
+		// Payload / claims
+		PayloadFunc: func(userId string) map[string]interface{} {
+			claims := make(map[string]interface{})
+			claims["UserLevel"] = "9001"
+			return claims
+		},
+	}
+
 The following text is from the original: [StephanDollberg/go-json-rest-middleware-jwt](https://github.com/StephanDollberg/go-json-rest-middleware-jwt)
 
 JWT Middleware for Go-Json-Rest
