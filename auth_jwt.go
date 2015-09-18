@@ -8,7 +8,7 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"log"
 	"net/http"
-	"reflect"
+	//"reflect"
 	"strings"
 	"time"
 )
@@ -70,12 +70,6 @@ const (
 // MiddlewareFunc makes JWTMiddleware implement the Middleware interface.
 func (mw *JWTMiddleware) MiddlewareFunc(handler rest.HandlerFunc) rest.HandlerFunc {
 
-	// DEBUG
-	fmt.Printf("*************************** MiddlewareFunc\n")
-	fmt.Printf("*************************** test error code jwt.ValidationErrorNotValidYet %s\n", jwt.ValidationErrorNotValidYet)
-	fmt.Printf("*************************** test error code AuthJwtErrorNotValidYet %s\n", AuthJwtErrorNotValidYet)
-	fmt.Printf("*************************** test error code AuthJwtErrorLoginFailed %s\n", AuthJwtErrorLoginFailed)
-	fmt.Printf("*************************** test error code AuthJwtErrorInternalError %s\n", AuthJwtErrorInternalError)
 	if mw.Realm == "" {
 		log.Fatal("Realm is required")
 	}
@@ -102,16 +96,13 @@ func (mw *JWTMiddleware) MiddlewareFunc(handler rest.HandlerFunc) rest.HandlerFu
 
 func (mw *JWTMiddleware) middlewareImpl(writer rest.ResponseWriter, request *rest.Request, handler rest.HandlerFunc) {
 
-	// DEBUG
-	fmt.Printf("*************************** middlewareImpl\n")
-
 	token, err := mw.parseToken(request)
 
 	if err != nil {
 		// DEBUG
-		fmt.Printf("*** EXIT ** PARSETOKENS ERROR *** middlewareImpl: %s\n", err.Error())
-		fmt.Printf("*** EXIT ** PARSETOKENS ERROR ***** TypeOf error: %s\n", reflect.TypeOf(err))
-
+		if mw.DebugLevel > 0 {
+			fmt.Printf("Jwt ERROR middlewareImpl: %s\n", err.Error())
+		}
 		mw.unauthorized(writer, err)
 		return
 	}
@@ -122,27 +113,19 @@ func (mw *JWTMiddleware) middlewareImpl(writer rest.ResponseWriter, request *res
 	request.Env["JWT_PAYLOAD"] = token.Claims
 
 	if mw.DebugLevel > 2 {
-		fmt.Printf("REMOTE_USER: %s\n", request.Env["REMOTE_USER"])
-		fmt.Printf("REMOTE_USER: %v\n", request.Env["JWT_PAYLOAD"])
+		fmt.Printf("Jwt REMOTE_USER: %s\n", request.Env["REMOTE_USER"])
+		fmt.Printf("Jwt JWT_PAYLOAD: %v\n", request.Env["JWT_PAYLOAD"])
 	}
 
 	if !mw.Authorizator(id, request) {
 		mw.unauthorized(writer, &AuthJwtError{err: "user " + id + " not authorized for request " + request.URL.String(), ErrorCode: AuthJwtErrorAuthorizationFailed})
 		return
 	}
-
-	fmt.Printf("*** ------------------ ******************** middlewareImpl PAYLOAD before: %s\n", request.Env["JWT_PAYLOAD"])
-
 	handler(writer, request)
-
-	fmt.Printf("*** ------------------ ******************** middlewareImpl PAYLOAD after: %s\n", request.Env["JWT_PAYLOAD"])
 }
 
 // Helper function to extract the JWT claims
 func ExtractClaims(request *rest.Request) map[string]interface{} {
-
-	// DEBUG
-	fmt.Printf("*************************** ExtractClaims")
 
 	if request.Env["JWT_PAYLOAD"] == nil {
 		empty_claims := make(map[string]interface{})
@@ -173,15 +156,14 @@ func (e AuthJwtError) Error() string {
 // Reply will be of the form {"token": "TOKEN"}.
 func (mw *JWTMiddleware) LoginHandler(writer rest.ResponseWriter, request *rest.Request) {
 
-	// DEBUG
-	fmt.Printf("*************************** LoginHandler\n")
-
 	login_vals := login{}
 	err := request.DecodeJsonPayload(&login_vals)
 
 	if err != nil {
 		// DEBUG
-		fmt.Printf("*** LoginHandler Error: %s\n", err.Error())
+		if mw.DebugLevel > 0 {
+			fmt.Printf("Jwt ERROR LoginHandler: %s\n", err.Error())
+		}
 		mw.unauthorized(writer, err)
 		return
 	}
@@ -190,10 +172,7 @@ func (mw *JWTMiddleware) LoginHandler(writer rest.ResponseWriter, request *rest.
 		mw.unauthorized(writer, &AuthJwtError{err: "login failed", ErrorCode: AuthJwtErrorLoginFailed})
 		return
 	}
-	// DEBUG
-	fmt.Printf("*** Before LoginHandler GetSigningMethod: %s\n", mw.SigningAlgorithm)
 	token := jwt.New(jwt.GetSigningMethod(mw.SigningAlgorithm))
-	fmt.Printf("*** After LoginHandler GetSigningMethod: %s\n", mw.SigningAlgorithm)
 
 	if mw.PayloadFunc != nil {
 		for key, value := range mw.PayloadFunc(login_vals.Username) {
@@ -218,21 +197,12 @@ func (mw *JWTMiddleware) LoginHandler(writer rest.ResponseWriter, request *rest.
 
 func (mw *JWTMiddleware) parseToken(request *rest.Request) (*jwt.Token, error) {
 
-	// DEBUG
-	fmt.Printf("* parseToken : %v\n", request.Header)
-
 	authHeader := request.Header.Get("Authorization")
-
-	// DEBUG
-	fmt.Printf("* parseToken Header: %v\n", request.Header)
 
 	if authHeader == "" {
 		//return nil, errors.New("Auth header empty")
 		return nil, &AuthJwtError{err: "auth header empty", ErrorCode: jwt.ValidationErrorMalformed}
 	}
-
-	// DEBUG
-	fmt.Printf("* parseToken authHeader: %v\n", authHeader)
 
 	parts := strings.SplitN(authHeader, " ", 2)
 	if !(len(parts) == 2 && parts[0] == "Bearer") {
@@ -258,16 +228,14 @@ type token struct {
 // Reply will be of the form {"token": "TOKEN"}.
 func (mw *JWTMiddleware) RefreshHandler(writer rest.ResponseWriter, request *rest.Request) {
 
-	// DEBUG
-	fmt.Printf("*************************** RefreshHandler : %v\n", request.Env)
-
 	token, err := mw.parseToken(request)
 
 	// Token should be valid anyway as the RefreshHandler is authed
 	if err != nil {
-
 		// DEBUG
-		fmt.Printf("* parse: %v\n", err.Error())
+		if mw.DebugLevel > 0 {
+			fmt.Printf("Jwt ERROR RefreshHandler parseToken: %s\n", err.Error())
+		}
 		mw.unauthorized(writer, err)
 		return
 	}
@@ -300,9 +268,6 @@ func (mw *JWTMiddleware) RefreshHandler(writer rest.ResponseWriter, request *res
 
 func (mw *JWTMiddleware) unauthorized(writer rest.ResponseWriter, err error) {
 
-	// DEBUG
-	fmt.Printf("* unauthorized\n")
-
 	writer.Header().Set("WWW-Authenticate", "JWT realm="+mw.Realm)
 	errorMsg := "not authorized"
 
@@ -313,13 +278,19 @@ func (mw *JWTMiddleware) unauthorized(writer rest.ResponseWriter, err error) {
 
 		switch err.(type) {
 		case *jwt.ValidationError:
-			fmt.Printf("*** EXIT ** PARSETOKENS ERROR ***** IS *jwt.ValidationError !!)")
+			// DEBUG
+			if mw.DebugLevel > 1 {
+				fmt.Printf("Jwt ERROR unauthorized IS *jwt.ValidationError\n")
+			}
 			if ve, ok := err.(*jwt.ValidationError); ok {
 				JwtValidationMessage = ve.Error()
 				JwtValidationCode = ve.Errors
 			}
 		case *AuthJwtError:
-			fmt.Printf("*** EXIT ** PARSETOKENS ERROR ***** IS *AuthJwtError !!)")
+			// DEBUG
+			if mw.DebugLevel > 1 {
+				fmt.Printf("Jwt ERROR unauthorized IS *jwt.AuthJwtError")
+			}
 			if ae, ok := err.(*AuthJwtError); ok {
 				JwtValidationMessage = ae.Error()
 				JwtValidationCode = ae.ErrorCode
