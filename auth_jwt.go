@@ -61,9 +61,9 @@ type JWTMiddleware struct {
 
 // The errors that might occur inside auth_jwt and not inside dgrijalva/jwt-go
 const (
-	AuthJwtErrorNotValidYet uint32 = jwt.ValidationErrorNotValidYet << iota // error const start after jwt errors
-	AuthJwtErrorLoginFailed
-	AuthJwtErrorAuthorizationFailed // Login failed
+	AuthJwtErrorNotValidYet         uint32 = jwt.ValidationErrorNotValidYet << iota // error const start after jwt errors
+	AuthJwtErrorLoginFailed                                                         // login failed
+	AuthJwtErrorAuthorizationFailed                                                 // Not authorized for resource failed
 	AuthJwtErrorInternalError
 )
 
@@ -118,6 +118,9 @@ func (mw *JWTMiddleware) middlewareImpl(writer rest.ResponseWriter, request *res
 	}
 
 	if !mw.Authorizator(id, request) {
+		if mw.DebugLevel > 2 {
+			fmt.Printf("Authorization failed for: '%s' on '%s'\n", id, request.URL.String())
+		}
 		mw.unauthorized(writer, &AuthJwtError{err: "user " + id + " not authorized for request " + request.URL.String(), ErrorCode: AuthJwtErrorAuthorizationFailed})
 		return
 	}
@@ -169,6 +172,9 @@ func (mw *JWTMiddleware) LoginHandler(writer rest.ResponseWriter, request *rest.
 	}
 
 	if !mw.Authenticator(login_vals.Username, login_vals.Password) {
+		if mw.DebugLevel > 1 {
+			fmt.Printf("login failed for '%s', '%s'\n", login_vals.Username, login_vals.Password)
+		}
 		mw.unauthorized(writer, &AuthJwtError{err: "login failed", ErrorCode: AuthJwtErrorLoginFailed})
 		return
 	}
@@ -206,13 +212,11 @@ func (mw *JWTMiddleware) parseToken(request *rest.Request) (*jwt.Token, error) {
 
 	parts := strings.SplitN(authHeader, " ", 2)
 	if !(len(parts) == 2 && parts[0] == "Bearer") {
-		//return nil, errors.New("Invalid auth header")
 		return nil, &AuthJwtError{err: "invalid auth header", ErrorCode: jwt.ValidationErrorMalformed}
 	}
 
 	return jwt.Parse(parts[1], func(token *jwt.Token) (interface{}, error) {
 		if jwt.GetSigningMethod(mw.SigningAlgorithm) != token.Method {
-			//return nil, errors.New("Invalid signing algorithm")
 			return nil, &AuthJwtError{err: "invalid signing algorithm", ErrorCode: jwt.ValidationErrorUnverifiable}
 		}
 		return mw.Key, nil
