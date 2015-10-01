@@ -2,13 +2,11 @@
 package jwt
 
 import (
-	//"errors"
 	"fmt"
 	"github.com/ant0ine/go-json-rest/rest"
 	"github.com/dgrijalva/jwt-go"
 	"log"
 	"net/http"
-	//"reflect"
 	"strings"
 	"time"
 )
@@ -118,7 +116,7 @@ func (mw *JWTMiddleware) middlewareImpl(writer rest.ResponseWriter, request *res
 	}
 
 	if !mw.Authorizator(id, request) {
-		if mw.DebugLevel > 2 {
+		if mw.DebugLevel > 1 {
 			fmt.Printf("Authorization failed for: '%s' on '%s'\n", id, request.URL.String())
 		}
 		mw.unauthorized(writer, &AuthJwtError{err: "user " + id + " not authorized for request " + request.URL.String(), ErrorCode: AuthJwtErrorAuthorizationFailed})
@@ -149,7 +147,7 @@ type AuthJwtError struct {
 	ErrorCode uint32 // numeric error, see jwt.ValidationError... constants
 }
 
-// AuthJwtError error is an error type
+// AuthJwtError is an error type
 func (e AuthJwtError) Error() string {
 	return e.err
 }
@@ -206,7 +204,6 @@ func (mw *JWTMiddleware) parseToken(request *rest.Request) (*jwt.Token, error) {
 	authHeader := request.Header.Get("Authorization")
 
 	if authHeader == "" {
-		//return nil, errors.New("Auth header empty")
 		return nil, &AuthJwtError{err: "auth header empty", ErrorCode: jwt.ValidationErrorMalformed}
 	}
 
@@ -277,38 +274,74 @@ func (mw *JWTMiddleware) unauthorized(writer rest.ResponseWriter, err error) {
 
 	var JwtValidationMessage string
 	var JwtValidationCode uint32
+	var domain string
 
 	if err != nil {
 
 		switch err.(type) {
 		case *jwt.ValidationError:
 			// DEBUG
-			if mw.DebugLevel > 1 {
+			if mw.DebugLevel > 2 {
 				fmt.Printf("Jwt ERROR unauthorized IS *jwt.ValidationError\n")
 			}
 			if ve, ok := err.(*jwt.ValidationError); ok {
 				JwtValidationMessage = ve.Error()
 				JwtValidationCode = ve.Errors
+				domain = "jwt"
 			}
 		case *AuthJwtError:
 			// DEBUG
-			if mw.DebugLevel > 1 {
-				fmt.Printf("Jwt ERROR unauthorized IS *jwt.AuthJwtError")
+			if mw.DebugLevel > 2 {
+				fmt.Printf("Jwt ERROR unauthorized IS *jwt.AuthJwtError\n")
 			}
 			if ae, ok := err.(*AuthJwtError); ok {
 				JwtValidationMessage = ae.Error()
 				JwtValidationCode = ae.ErrorCode
+				domain = "auth_jwt"
 			}
 		default:
 			JwtValidationMessage = err.Error()
 			JwtValidationCode = AuthJwtErrorInternalError
+			domain = "internal"
 		}
 	}
 	writer.WriteHeader(http.StatusUnauthorized)
-	err = writer.WriteJson(map[string]interface{}{
-		"Error":                errorMsg,
-		"JwtValidationMessage": JwtValidationMessage,
-		"JwtValidationCode":    JwtValidationCode})
+
+	// Create the error structure to send back as JSON
+	var errorObj = struct {
+		ApiVersion  string `json:"apiVersion"`
+		ErrorStruct struct {
+			Code    uint32 `json:"code"`
+			Message string `json:"message"`
+			XErrors []struct {
+				Domain  string `json:"domain"`
+				Message string `json:"message"`
+			} `json:"errors"`
+		} `json:"error"`
+	}{
+		ApiVersion: "1.0",
+		ErrorStruct: struct {
+			Code    uint32 `json:"code"`
+			Message string `json:"message"`
+			XErrors []struct {
+				Domain  string `json:"domain"`
+				Message string `json:"message"`
+			} `json:"errors"`
+		}{
+			Code:    JwtValidationCode,
+			Message: errorMsg,
+			XErrors: []struct {
+				Domain  string `json:"domain"`
+				Message string `json:"message"`
+			}{
+				{Domain: "global", Message: errorMsg},
+				{Domain: domain, Message: JwtValidationMessage},
+			},
+		},
+	}
+
+	err = writer.WriteJson(errorObj)
+
 	if err != nil {
 		panic(err)
 	}
